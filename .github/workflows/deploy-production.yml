@@ -1,0 +1,76 @@
+name: Deploy Production
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'README.md'
+
+jobs:
+  deploy:
+    name: Deploy - prod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Use Node.js 16.x
+        uses: actions/setup-node@v1
+        with:
+          node-version: 16.x
+
+      - uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install Dependencies
+        if: steps.yarn-cache.outputs.cache-hit != 'true'
+        run: yarn
+
+      # - name: Lint
+      #   run: yarn lint
+
+      # - name: Run Test
+      #   run: yarn test
+
+      # - name: Build
+      #   run: yarn build
+      #   env:
+      #     CI: false
+
+      # - name: Deploy
+      #   uses: jakejarvis/s3-sync-action@master
+      #   env:
+      #     AWS_S3_BUCKET: ${{ secrets.AWS_BUCKET }}
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_KEY }}
+      #     AWS_REGION: "ap-northeast-2"
+      #     SOURCE_DIR: "build"
+
+      # - name: Cache invalidation
+      #   uses: chetan/invalidate-cloudfront-action@v2
+      #   env:
+      #     DISTRIBUTION: ${{ secrets.AWS_DISTRIBUTION_ID }}
+      #     PATHS: "/*"
+      #     AWS_REGION: "ap-northeast-2"
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_KEY }}
+
+      - name: Send slack message
+        uses: 8398a7/action-slack@v3
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: custom
+          job_name: Deploy - prod # Match the name above.
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              attachments: [{
+                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
+                text: `*stage: prod* - ${{github.repository}} 배포가 ${${{ job.status  == 'success'}} ? "완료되었습니다! :rocket:": "실패하였습니다 ㅜㅜ :warning:"} \n\n${process.env.AS_WORKFLOW}\n${process.env.AS_JOB} (${process.env.AS_COMMIT}) of ${process.env.AS_REPO}@${process.env.AS_REF} by ${process.env.AS_AUTHOR} ${{ job.status }} in ${process.env.AS_TOOK}`,
+              }]
+            }
+        if: always()
